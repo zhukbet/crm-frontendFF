@@ -11,7 +11,11 @@ import { NotificationsPage } from '@/pages/NotificationsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import './index.css';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, refetchOnWindowFocus: false },
+  },
+});
 
 const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
