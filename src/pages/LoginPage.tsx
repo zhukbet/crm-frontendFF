@@ -54,7 +54,10 @@ export function LoginPage() {
         <h1 className="mb-2 text-lg font-medium">Support CRM</h1>
         <p className="mb-4 text-sm text-text-muted">Увійдіть через Telegram, щоб продовжити.</p>
         {BOT_USERNAME ? (
-          <div ref={widgetContainerRef} className="flex justify-center" />
+          // Telegram's widget renders in a cross-origin iframe we can't theme — it assumes a
+          // light page. A fixed light background (not theme-aware) keeps its text legible
+          // even in our dark theme, instead of dark-on-dark.
+          <div ref={widgetContainerRef} className="flex justify-center rounded-md bg-white p-2" />
         ) : (
           <p className="text-xs text-text-muted">
             VITE_TELEGRAM_BOT_USERNAME не задано — Telegram-віджет не може завантажитись.
