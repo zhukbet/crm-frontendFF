@@ -32,6 +32,17 @@ export function useTelegramLoginMutation() {
   });
 }
 
+/** Dev-only: logs in as a seeded agent by username, no Telegram involved. The backend
+ * hard-disables this outside development (see AuthController.devLogin). */
+export function useDevLoginMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (username: string) =>
+      api.post<{ id: string; name: string; role: string }>('/api/auth/dev-login', { username }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['me'] }),
+  });
+}
+
 export function useLogoutMutation() {
   const queryClient = useQueryClient();
   return useMutation({
