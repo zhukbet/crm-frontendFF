@@ -29,12 +29,20 @@ export function LoginPage() {
   const widgetContainerRef = useRef<HTMLDivElement>(null);
   const [devUsername, setDevUsername] = useState('admin_agent');
 
-  const loginMutate = login.mutate;
+  // Always-current ref instead of a `login.mutate` effect dependency: injecting the widget
+  // script must happen exactly once (on mount), full stop. Depending on `login` (or even just
+  // `login.mutate`) re-ran the effect on renders where that reference changed, tearing down and
+  // re-injecting the script — visible in production as a container that's *empty* (caught
+  // mid-teardown) as often as it shows the button, and it once escalated into React's "Maximum
+  // update depth exceeded". A ref-captured callback sidesteps the question of whether `mutate`
+  // is stable entirely: the effect only ever runs once, and always calls the latest mutate.
+  const loginMutateRef = useRef(login.mutate);
+  loginMutateRef.current = login.mutate;
 
   useEffect(() => {
     if (!BOT_USERNAME || !widgetContainerRef.current) return;
 
-    window.onTelegramAuth = (user) => loginMutate(user);
+    window.onTelegramAuth = (user) => loginMutateRef.current(user);
 
     const script = document.createElement('script');
     script.src = 'https://telegram.org/js/telegram-widget.js?22';
@@ -51,11 +59,7 @@ export function LoginPage() {
       delete window.onTelegramAuth;
       container.replaceChildren();
     };
-    // login.mutate is stable across renders (per TanStack Query) — depending on the whole
-    // `login` object instead re-ran this on every render (it's a fresh object each time),
-    // repeatedly re-injecting the widget script and eventually tripping React's
-    // "Maximum update depth exceeded" once the widget's own DOM churn fed back into a render.
-  }, [loginMutate]);
+  }, []);
 
   if (isLoading) {
     return (
