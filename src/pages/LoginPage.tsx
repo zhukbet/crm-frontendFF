@@ -29,10 +29,12 @@ export function LoginPage() {
   const widgetContainerRef = useRef<HTMLDivElement>(null);
   const [devUsername, setDevUsername] = useState('admin_agent');
 
+  const loginMutate = login.mutate;
+
   useEffect(() => {
     if (!BOT_USERNAME || !widgetContainerRef.current) return;
 
-    window.onTelegramAuth = (user) => login.mutate(user);
+    window.onTelegramAuth = (user) => loginMutate(user);
 
     const script = document.createElement('script');
     script.src = 'https://telegram.org/js/telegram-widget.js?22';
@@ -42,12 +44,18 @@ export function LoginPage() {
     script.setAttribute('data-radius', '10');
     script.setAttribute('data-onauth', 'onTelegramAuth(user)');
     script.setAttribute('data-request-access', 'write');
-    widgetContainerRef.current.appendChild(script);
+    const container = widgetContainerRef.current;
+    container.appendChild(script);
 
     return () => {
       delete window.onTelegramAuth;
+      container.replaceChildren();
     };
-  }, [login]);
+    // login.mutate is stable across renders (per TanStack Query) — depending on the whole
+    // `login` object instead re-ran this on every render (it's a fresh object each time),
+    // repeatedly re-injecting the widget script and eventually tripping React's
+    // "Maximum update depth exceeded" once the widget's own DOM churn fed back into a render.
+  }, [loginMutate]);
 
   if (isLoading) {
     return (
@@ -60,8 +68,8 @@ export function LoginPage() {
 
   return (
     <div className="flex h-screen items-center justify-center bg-surface px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-border bg-surface-muted p-8 text-center shadow-xl shadow-black/5">
-        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-xl bg-brand/10 text-brand">
+      <div className="animate-fade-up w-full max-w-sm rounded-lg border border-border bg-surface-muted p-8 text-center">
+        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-lg bg-brand/10 text-brand">
           <Inbox size={24} strokeWidth={1.75} />
         </div>
         <h1 className="mb-1 text-lg font-semibold">Support CRM</h1>
@@ -81,7 +89,7 @@ export function LoginPage() {
         )}
 
         {login.isError ? (
-          <div className="mt-4 flex items-start gap-2 rounded-lg bg-priority-urgent/10 p-3 text-left text-xs text-priority-urgent">
+          <div className="animate-fade-up mt-4 flex items-start gap-2 rounded-lg bg-priority-urgent/10 p-3 text-left text-xs text-priority-urgent">
             <TriangleAlert size={14} className="mt-0.5 shrink-0" />
             <span>Не вдалось увійти: {(login.error as Error).message}</span>
           </div>

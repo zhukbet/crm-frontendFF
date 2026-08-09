@@ -47,6 +47,10 @@ export function useLogoutMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => api.post('/api/auth/logout'),
-    onSuccess: () => queryClient.setQueryData(['me'], undefined),
+    // NOT setQueryData(['me'], undefined) — TanStack Query treats an updater/value of
+    // undefined as "don't update", so that call was a silent no-op and the cached agent
+    // stuck around client-side even though the session cookie was already cleared.
+    // invalidateQueries forces a real refetch, which now correctly 401s and flips isError.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['me'] }),
   });
 }
