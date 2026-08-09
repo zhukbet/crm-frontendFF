@@ -1,9 +1,10 @@
+import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { PriorityDot } from '@/components/ui/priority-dot';
 import { Pill } from '@/components/ui/pill';
-import { useMeQuery } from '@/hooks/useAuth';
 import {
   useAddCommentMutation,
+  useClaimMutation,
   useReplyMutation,
   useTicketCommentsQuery,
   useTicketMessagesQuery,
@@ -11,6 +12,7 @@ import {
   useTicketsQuery,
 } from '@/hooks/useTickets';
 import { cn } from '@/lib/utils';
+import { useUiStore } from '@/store/ui.store';
 import type { TicketStatus } from '@/types/domain';
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
@@ -32,16 +34,23 @@ export function InboxPage() {
   const [replyText, setReplyText] = useState('');
   const [commentText, setCommentText] = useState('');
 
-  const { data: me } = useMeQuery();
   const ticketsQuery = useTicketsQuery({ status, limit: 50 });
   const ticketQuery = useTicketQuery(selectedId);
   const messagesQuery = useTicketMessagesQuery(selectedId);
   const commentsQuery = useTicketCommentsQuery(selectedId);
   const reply = useReplyMutation(selectedId ?? '');
   const addComment = useAddCommentMutation(selectedId ?? '');
+  const claim = useClaimMutation(selectedId ?? '');
+  const newTicketIds = useUiStore((s) => s.newTicketIds);
+  const clearTicketNew = useUiStore((s) => s.clearTicketNew);
 
   const tickets = ticketsQuery.data?.data ?? [];
   const selected = ticketQuery.data;
+
+  function handleSelectTicket(id: string) {
+    setSelectedId(id);
+    clearTicketNew(id);
+  }
 
   function handleSendReply() {
     if (!replyText.trim() || !selectedId) return;
@@ -84,14 +93,21 @@ export function InboxPage() {
           {tickets.map((ticket) => (
             <li key={ticket.id}>
               <button
-                onClick={() => setSelectedId(ticket.id)}
+                onClick={() => handleSelectTicket(ticket.id)}
                 className={cn(
                   'flex w-full flex-col gap-1 border-b border-border px-3 py-2.5 text-left hover:bg-surface-muted',
                   ticket.id === selectedId && 'bg-surface-muted',
                 )}
               >
                 <div className="flex items-center gap-2">
-                  <PriorityDot priority={ticket.priority} />
+                  {newTicketIds.has(ticket.id) ? (
+                    <span
+                      className="inline-block size-2 shrink-0 rounded-full bg-emerald-500"
+                      title="Новий тред"
+                    />
+                  ) : (
+                    <PriorityDot priority={ticket.priority} />
+                  )}
                   <span className="truncate text-sm font-medium">
                     {ticket.customer.displayName ?? ticket.customer.username ?? 'Клієнт'}
                   </span>
@@ -192,6 +208,13 @@ export function InboxPage() {
         {selected ? (
           <>
             <div>
+              <div className="mb-1 text-xs text-text-muted">Чат</div>
+              <div className="truncate text-sm">{selected.chat.title}</div>
+              {selected.chat.chatGroup ? (
+                <div className="text-xs text-text-muted">{selected.chat.chatGroup.name}</div>
+              ) : null}
+            </div>
+            <div>
               <div className="mb-1 text-xs text-text-muted">Пріоритет</div>
               <div className="flex items-center gap-2 text-sm">
                 <PriorityDot priority={selected.priority} /> {selected.priority}
@@ -200,6 +223,21 @@ export function InboxPage() {
             <div>
               <div className="mb-1 text-xs text-text-muted">Виконавець</div>
               <div className="text-sm">{selected.assignee?.name ?? 'Не призначено'}</div>
+              {!selected.assigneeId && (
+                <button
+                  onClick={() => claim.mutate()}
+                  disabled={claim.isPending}
+                  className="mt-2 flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs text-white disabled:opacity-50"
+                >
+                  {claim.isPending && <Loader2 size={12} className="animate-spin" />}
+                  Взяти на себе
+                </button>
+              )}
+              {claim.isError ? (
+                <p className="mt-1 text-xs text-priority-urgent">
+                  {(claim.error as Error).message}
+                </p>
+              ) : null}
             </div>
             <div>
               <div className="mb-1 text-xs text-text-muted">Статус</div>
@@ -212,12 +250,6 @@ export function InboxPage() {
                 <div className="text-xs text-text-muted">@{selected.customer.username}</div>
               ) : null}
             </div>
-            {me && !selected.assigneeId && (
-              <p className="text-xs text-text-muted">
-                Ще не призначено — дія «беру на себе» (Seq 28) доступна через API
-                (`POST /tickets/:id/claim`), кнопки в цьому UI поки нема.
-              </p>
-            )}
           </>
         ) : (
           <p className="text-sm text-text-muted">Немає вибраного тікета</p>

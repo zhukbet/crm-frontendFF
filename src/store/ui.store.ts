@@ -7,6 +7,9 @@ interface UiState {
   toggleTheme: () => void;
   commandPaletteOpen: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
+  newTicketIds: Set<string>;
+  markTicketNew: (ticketId: string) => void;
+  clearTicketNew: (ticketId: string) => void;
 }
 
 function applyThemeToDocument(theme: Theme) {
@@ -28,4 +31,14 @@ export const useUiStore = create<UiState>((set, get) => ({
   },
   commandPaletteOpen: false,
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
+  newTicketIds: new Set<string>(),
+  markTicketNew: (ticketId) =>
+    set((state) => ({ newTicketIds: new Set(state.newTicketIds).add(ticketId) })),
+  clearTicketNew: (ticketId) =>
+    set((state) => {
+      if (!state.newTicketIds.has(ticketId)) return state;
+      const next = new Set(state.newTicketIds);
+      next.delete(ticketId);
+      return { newTicketIds: next };
+    }),
 }));
