@@ -29,13 +29,9 @@ export function LoginPage() {
   const widgetContainerRef = useRef<HTMLDivElement>(null);
   const [devUsername, setDevUsername] = useState('admin_agent');
 
-  // Always-current ref instead of a `login.mutate` effect dependency: injecting the widget
-  // script must happen exactly once (on mount), full stop. Depending on `login` (or even just
-  // `login.mutate`) re-ran the effect on renders where that reference changed, tearing down and
-  // re-injecting the script — visible in production as a container that's *empty* (caught
-  // mid-teardown) as often as it shows the button, and it once escalated into React's "Maximum
-  // update depth exceeded". A ref-captured callback sidesteps the question of whether `mutate`
-  // is stable entirely: the effect only ever runs once, and always calls the latest mutate.
+  // Always-current ref instead of a `login.mutate` effect dependency: the widget's onauth
+  // callback should always call *today's* mutate, but shouldn't force the script-injection
+  // effect below to re-run just because that reference changed — see the effect's own comment.
   const loginMutateRef = useRef(login.mutate);
   loginMutateRef.current = login.mutate;
 
@@ -59,7 +55,15 @@ export function LoginPage() {
       delete window.onTelegramAuth;
       container.replaceChildren();
     };
-  }, []);
+    // Deliberately depends on isLoading, not []: the component returns the loading spinner
+    // (no widgetContainerRef in the tree at all) until useMeQuery settles, so an effect that
+    // only ever runs once on mount commits against *that* render — widgetContainerRef.current
+    // is null forever after, and the button never appears. Re-running once isLoading flips to
+    // false catches the real card's first render, where the ref is finally attached. This was
+    // the actual root cause of the "button sometimes missing" prod bug — the earlier fix (empty
+    // deps, ref-captured mutate) addressed a real but different problem (re-injection churn from
+    // an unstable effect dependency) without noticing this one.
+  }, [isLoading]);
 
   if (isLoading) {
     return (
