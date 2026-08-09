@@ -85,10 +85,28 @@ export function usePatchTicketMutation(id: string) {
   });
 }
 
+export interface UploadedFile {
+  fileId: string;
+  url: string;
+  mimeType: string;
+}
+
+/** POST /api/uploads — agent-attached media for a reply. Returns a fileId the reply endpoint
+ * accepts directly (see ReplyTicketDto.attachments on the backend). */
+export function useUploadFileMutation() {
+  return useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return api.upload<UploadedFile>('/api/uploads', formData);
+    },
+  });
+}
+
 export function useReplyMutation(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { text: string; attachments?: string[] }) =>
+    mutationFn: (payload: { text: string; attachments?: string[]; asReply?: boolean }) =>
       api.post<Message>(`/api/tickets/${id}/reply`, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ticket', id, 'messages'] });

@@ -29,4 +29,17 @@ export const api = {
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  // No Content-Type header here — the browser sets multipart/form-data with the right boundary
+  // itself; forcing application/json (like `request` does for everything else) would break it.
+  upload: async <T>(path: string, formData: FormData): Promise<T> => {
+    const res = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+    if (!res.ok) {
+      throw new ApiError(res.status, await res.text().catch(() => res.statusText));
+    }
+    return res.json() as Promise<T>;
+  },
 };

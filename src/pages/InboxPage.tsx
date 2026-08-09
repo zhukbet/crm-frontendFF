@@ -1,19 +1,24 @@
-import { Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { Loader2, Paperclip, X } from 'lucide-react';
+import { useRef, useState } from 'react';
 import { PriorityDot } from '@/components/ui/priority-dot';
 import { Pill } from '@/components/ui/pill';
 import {
   useAddCommentMutation,
   useClaimMutation,
+  usePatchTicketMutation,
   useReplyMutation,
   useTicketCommentsQuery,
   useTicketMessagesQuery,
   useTicketQuery,
   useTicketsQuery,
+  useUploadFileMutation,
+  type UploadedFile,
 } from '@/hooks/useTickets';
 import { cn } from '@/lib/utils';
 import { useUiStore } from '@/store/ui.store';
 import type { TicketStatus } from '@/types/domain';
+
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
   open: 'Відкриті',
@@ -21,6 +26,7 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
   on_hold: 'На паузі',
   solved: 'Вирішені',
   closed: 'Закриті',
+  archived: 'Архів',
 };
 
 /** Section 13: three-panel inbox — thread list / conversation / metadata, wired to the real
@@ -32,15 +38,20 @@ export function InboxPage() {
   const [status, setStatus] = useState<TicketStatus>('open');
   const [selectedId, setSelectedId] = useState<string>();
   const [replyText, setReplyText] = useState('');
+  const [asReply, setAsReply] = useState(true);
+  const [pendingAttachments, setPendingAttachments] = useState<UploadedFile[]>([]);
   const [commentText, setCommentText] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const ticketsQuery = useTicketsQuery({ status, limit: 50 });
   const ticketQuery = useTicketQuery(selectedId);
   const messagesQuery = useTicketMessagesQuery(selectedId);
   const commentsQuery = useTicketCommentsQuery(selectedId);
   const reply = useReplyMutation(selectedId ?? '');
+  const uploadFile = useUploadFileMutation();
   const addComment = useAddCommentMutation(selectedId ?? '');
   const claim = useClaimMutation(selectedId ?? '');
+  const patchTicket = usePatchTicketMutation(selectedId ?? '');
   const newTicketIds = useUiStore((s) => s.newTicketIds);
   const clearTicketNew = useUiStore((s) => s.clearTicketNew);
 
@@ -53,8 +64,29 @@ export function InboxPage() {
   }
 
   function handleSendReply() {
-    if (!replyText.trim() || !selectedId) return;
-    reply.mutate({ text: replyText }, { onSuccess: () => setReplyText('') });
+    if ((!replyText.trim() && pendingAttachments.length === 0) || !selectedId) return;
+    reply.mutate(
+      { text: replyText, asReply, attachments: pendingAttachments.map((a) => a.fileId) },
+      {
+        onSuccess: () => {
+          setReplyText('');
+          setPendingAttachments([]);
+        },
+      },
+    );
+  }
+
+  function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow picking the same file again later
+    if (!file || !selectedId) return;
+    uploadFile.mutate(file, {
+      onSuccess: (uploaded) => setPendingAttachments((prev) => [...prev, uploaded]),
+    });
+  }
+
+  function removePendingAttachment(fileId: string) {
+    setPendingAttachments((prev) => prev.filter((a) => a.fileId !== fileId));
   }
 
   function handleAddComment() {
@@ -157,6 +189,41 @@ export function InboxPage() {
                   )}
                 >
                   {m.text}
+                  {m.attachments.length > 0 && (
+                    <div className={cn('space-y-1', m.text && 'mt-1.5')}>
+                      {m.attachments.map((a, i) =>
+                        m.direction === 'out' ? (
+                          <a
+                            key={i}
+                            href={`${API_URL}/uploads/${a.fileId}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={cn(
+                              'flex items-center gap-1 text-xs underline underline-offset-2',
+                              m.direction === 'out' && 'text-white',
+                            )}
+                          >
+                            <Paperclip size={11} /> Вкладення
+                          </a>
+                        ) : (
+                          <div key={i} className="flex items-center gap-1 text-xs text-text-muted">
+                            <Paperclip size={11} /> Вкладення
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  )}
+                  <div
+                    className={cn(
+                      'mt-1 text-right text-[10px]',
+                      m.direction === 'in' ? 'text-text-muted' : 'text-white/70',
+                    )}
+                  >
+                    {new Date(m.createdAt).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </div>
                 </div>
               ))}
               {commentsQuery.data?.map((c) => (
@@ -167,7 +234,53 @@ export function InboxPage() {
               ))}
             </div>
             <footer className="space-y-2 border-t border-border p-3">
+              <label className="flex items-center gap-1.5 text-xs text-text-muted">
+                <input
+                  type="checkbox"
+                  checked={asReply}
+                  onChange={(e) => setAsReply(e.target.checked)}
+                  className="accent-brand"
+                />
+                Відповісти як reply (з цитатою повідомлення клієнта в Telegram)
+              </label>
+              {pendingAttachments.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {pendingAttachments.map((a) => (
+                    <span
+                      key={a.fileId}
+                      className="flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs"
+                    >
+                      <Paperclip size={11} /> {a.fileId}
+                      <button
+                        onClick={() => removePendingAttachment(a.fileId)}
+                        className="text-text-muted hover:text-priority-urgent"
+                        title="Прибрати"
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={handleFileSelected}
+                className="hidden"
+              />
               <div className="flex gap-2">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadFile.isPending}
+                  title="Прикріпити файл"
+                  className="rounded-lg border border-border px-2.5 text-text-muted hover:text-text disabled:opacity-50"
+                >
+                  {uploadFile.isPending ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Paperclip size={16} />
+                  )}
+                </button>
                 <input
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
@@ -183,6 +296,11 @@ export function InboxPage() {
                   Надіслати
                 </button>
               </div>
+              {uploadFile.isError ? (
+                <p className="text-xs text-priority-urgent">
+                  Не вдалось завантажити файл: {(uploadFile.error as Error).message}
+                </p>
+              ) : null}
               <div className="flex gap-2">
                 <input
                   value={commentText}
@@ -241,7 +359,23 @@ export function InboxPage() {
             </div>
             <div>
               <div className="mb-1 text-xs text-text-muted">Статус</div>
-              <div className="text-sm">{STATUS_LABEL[selected.status]}</div>
+              <select
+                value={selected.status}
+                onChange={(e) => patchTicket.mutate({ status: e.target.value as TicketStatus })}
+                disabled={patchTicket.isPending}
+                className="rounded-lg border border-border bg-transparent px-2 py-1.5 text-sm outline-none focus:border-brand disabled:opacity-50"
+              >
+                {Object.entries(STATUS_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              {patchTicket.isError ? (
+                <p className="mt-1 text-xs text-priority-urgent">
+                  {(patchTicket.error as Error).message}
+                </p>
+              ) : null}
             </div>
             <div>
               <div className="mb-1 text-xs text-text-muted">Клієнт</div>

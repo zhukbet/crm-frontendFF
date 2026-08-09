@@ -2,7 +2,7 @@
 // all). Not codegen: `npm run codegen` needs a live backend's /api/docs-json (see README) —
 // until then, this file is the source of truth and must be kept in sync by hand.
 
-export type TicketStatus = 'open' | 'pending' | 'on_hold' | 'solved' | 'closed';
+export type TicketStatus = 'open' | 'pending' | 'on_hold' | 'solved' | 'closed' | 'archived';
 export type TicketPriority = 'urgent' | 'high' | 'normal' | 'low';
 export type AgentRole = 'admin' | 'lead' | 'agent';
 export type RoutingStrategy = 'manual' | 'round_robin' | 'least_busy';
